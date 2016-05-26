@@ -1,0 +1,161 @@
+<canvas id="c"></canvas>
+<script>
+    const ctx = c.getContext("2d");
+    [c.width,c.height] = [window.innerWidth,window.innerHeight];
+    document.body.style.margin = document.body.style.overflow = 0;
+
+    const sin = n => Math.round(Math.sin(n));
+    const cos = n => Math.round(Math.cos(n));
+
+    let precision = 10;
+
+    let obstacles = " ".repeat(c.width / precision).split("").map(() => new Array(0 | c.height / precision));
+    let lines = [];
+
+    let destination = { x: -10, y: -10 };
+
+    class Robot {
+        constructor() {
+            this.x = 100;
+            this.y = 100;
+            this.dir = 0;
+            this.path = [];
+        }
+        getPath() {
+            let path = [{ x: (0 | destination.x / precision), y: (0 | destination.y / precision) }];
+            let field = obstacles.map(n => n.slice());
+
+            let pathfinders = [{ x: 0 | this.x / precision, y: 0 | this.y / precision }];
+
+            let age = 2;
+            a: while(true) {
+                let newPathfinders = [];
+                for(let pathfinder of pathfinders) {
+                    for(let i = 0; i < Math.PI * 2; i += Math.PI / 2) {
+                        const x = pathfinder.x + sin(i), y = pathfinder.y + cos(i);
+                        if(x > 0 && x < field.length && y > 0 && y < field[0].length && !field[x][y]) {
+                            newPathfinders.push({x,y});
+                            field[x][y] = age;
+                        }
+                    }
+                }
+                if(newPathfinders.length == 0) { console.log("Geen route mogelijk. Age: " + age); return }
+                else pathfinders = pathfinders.concat(newPathfinders);
+                ++age;
+
+                for(let i = 0; i < Math.PI * 2; i += Math.PI / 2) {
+                    if(field[(0 | destination.x / precision) + sin(i)][(0 | destination.y / precision) + cos(i)] >= 2) {
+                        path.push({ x: (0 | destination.x / precision) + sin(i), y: (0 | destination.y / precision) + cos(i) });
+                        break a;
+                    }
+                }
+            }
+
+            b: while(true) {
+                let options = [];
+                for(let i = 0; i < Math.PI * 2; i += Math.PI / 2) {
+                    const x = path[path.length - 1].x + sin(i);
+                    const y = path[path.length - 1].y + cos(i);
+
+                    if(field[x][y] == field[path[path.length - 1].x][path[path.length - 1].y] - 1) {
+                        options.push({x,y});
+                    }
+                }
+
+                path.push(options[0 | Math.random() * options.length]);
+                if(field[path[path.length - 1].x][path[path.length - 1].y] == 2) { console.log("Finished."); this.path = path.reverse().map(n => ({ x: n.x * precision, y: n.y * precision })); return }
+            }
+        }
+    }
+    let robot = new Robot();
+
+    function updateWindow() {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0,0,c.width,c.height);
+
+        for(let line of lines) {
+            ctx.beginPath();
+            ctx.moveTo(line[0].x,line[0].y);
+            for(let i = 1; i < line.length; ++i)
+                ctx.lineTo(line[i].x,line[i].y);
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 5;
+            ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(robot.x,robot.y,10,0,Math.PI * 2);
+        ctx.fillStyle = "blue";
+        ctx.fill();
+
+        ctx.beginPath();
+        for(let i = 0; i < robot.path.length; ++i) {
+            ctx.lineTo(robot.path[i].x,robot.path[i].y);
+        }
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "gray";
+        ctx.stroke();
+
+        if(robot.path.length > 0) {
+            robot.dir = Math.atan2(robot.path[0].x - robot.x,robot.path[0].y - robot.y);
+            robot.x += Math.sin(robot.dir);
+            robot.y += Math.cos(robot.dir);
+            if(Math.round(robot.x) == robot.path[0].x
+            && Math.round(robot.y) == robot.path[0].y) {
+                robot.path.splice(0, 1);
+            }
+        }
+
+        ctx.beginPath();
+        ctx.arc(destination.x,destination.y,5,0,Math.PI * 2);
+        ctx.fillStyle = "green";
+        ctx.fill();
+
+        requestAnimationFrame(updateWindow);
+    }
+    updateWindow();
+
+    alert("Use the left mouse button to draw obstacles, and the right mouse button to let the blue dot walk to that position");
+
+    let prev;
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    c.onmousemove = function(e) {
+        if(e.which == 1) {
+            if(prev) {
+                ctx.beginPath();
+                ctx.moveTo(prev.x,prev.y);
+                ctx.lineTo(e.x,e.y);
+                ctx.stroke();
+            }
+
+            if(prev) {
+                const dx = prev.x - e.x;
+                const dy = prev.y - e.y;
+                const s = Math.sqrt(Math.pow(dx,2) + Math.pow(dy,2));
+                const dir = Math.atan2(dy,dx);
+
+                let x = prev.x, y = prev.y;
+                for(let i = 0; i < s; ++i) {
+                    obstacles[0 | x / precision][0 | y / precision] = true;
+                    x += Math.cos(dir);
+                    y += Math.sin(dir);
+                }
+            } else obstacles[0 | e.x / precision][0 | e.y / precision] = true;
+
+            prev = { x: e.x, y: e.y };
+            lines[lines.length - 1].push(prev);
+        }
+    }
+    c.onmousedown = function(e) {
+        if (e.which == 1) {
+            prev = {x: e.x, y: e.y};
+            lines.push([{x: e.x, y: e.y}]);
+        } else if(e.which == 3) {
+            destination.x = e.x, destination.y = e.y;
+        }
+    }
+    c.onmouseup = function() { prev = undefined; robot.getPath() }
+    c.onmouseleave = function() { prev = undefined; robot.getPath() }
+    c.oncontextmenu = function() { return false; }
+</script>
